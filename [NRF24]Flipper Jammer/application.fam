@@ -1,0 +1,20 @@
+App(
+    appid="flipper_nrf24_jammer",
+    name="NRF24 Jammer",
+    entry_point="main",
+    fap_category="Wireless",
+    fap_author="akaFoxX",
+    fap_icon="app.png",
+    stack_size=4096 * 1024,
+    order=10,
+    requires=[
+        "gui",
+        "furi_hal",
+        "nrf24",
+    ],
+    icon="app.png",
+    fap_version=1,
+    fap_description="NRF24 Jammer for Flipper Zero",
+    fap_icon_assets="assets",
+    fap_weburl="https://github.com/akaFoxX/FlipperApps.git",
+)
