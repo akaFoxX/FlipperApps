@@ -3,6 +3,7 @@
 #include <gui/gui.h>
 #include <nrf24.h>
 #include <stdlib.h>
+#include "jammer.h"
 
 #define POWER_LEVELS 4
 static uint8_t power_levels[POWER_LEVELS] = {NRF24_PA_MIN, NRF24_PA_LOW, NRF24_PA_HIGH, NRF24_PA_MAX};
@@ -11,7 +12,7 @@ static uint8_t current_power_index = 3;
 static uint8_t start_channel = 2;
 static uint8_t end_channel = 80;
 static uint16_t attack_duration = 5000; // Tempo do jammer em ms
-static uint8_t target_channel = 0; // Canal alvo identificado
+static uint8_t target_channel = 2; // Canal alvo identificado
 
 void update_screen(Canvas* canvas) {
     canvas_clear(canvas);
@@ -34,16 +35,25 @@ void update_screen(Canvas* canvas) {
     canvas_draw_str(canvas, 10, 210, "Hold Left: Scan Channels");
 }
 
+uint8_t scan_for_active_channel(uint8_t start, uint8_t end) {
+    for(uint8_t ch = start; ch <= end; ch++) {
+        if(nrf24_detect_signal(&nrf, ch)) {
+            return ch;
+        }
+    }
+    return start;
+}
+
 void input_callback(InputEvent* event, void* context) {
     if(event->type == InputTypeShort) {
-        if(event->key == InputKeyUp) {
-            if(end_channel < 100) end_channel++;
-        } else if(event->key == InputKeyDown) {
-            if(start_channel > 1) start_channel--;
-        } else if(event->key == InputKeyLeft) {
-            if(current_power_index > 0) current_power_index--;
-        } else if(event->key == InputKeyRight) {
-            if(current_power_index < POWER_LEVELS - 1) current_power_index++;
+        if(event->key == InputKeyUp && end_channel < 100) {
+            end_channel++;
+        } else if(event->key == InputKeyDown && start_channel > 1) {
+            start_channel--;
+        } else if(event->key == InputKeyLeft && current_power_index > 0) {
+            current_power_index--;
+        } else if(event->key == InputKeyRight && current_power_index < POWER_LEVELS - 1) {
+            current_power_index++;
         } else if(event->key == InputKeyOk) {
             furi_thread_flags_set(furi_thread_get_id(), 1);
         }
@@ -51,45 +61,16 @@ void input_callback(InputEvent* event, void* context) {
         attack_duration += 5000;
         if(attack_duration > 60000) attack_duration = 5000;
     } else if(event->type == InputTypeLong && event->key == InputKeyLeft) {
-        target_channel = scan_for_active_channel();
-    }
-}
-
-uint8_t scan_for_active_channel() {
-    Nrf24 nrf;
-    nrf24_init(&nrf, GPIO_PIN_X, GPIO_PIN_Y);
-    uint8_t strongest_signal_channel = 0;
-    int32_t highest_rssi = -100;
-
-    for (uint8_t ch = start_channel; ch <= end_channel; ch++) {
-        nrf24_set_channel(&nrf, ch);
-        int32_t rssi = nrf24_get_rssi(&nrf);
-        if (rssi > highest_rssi) {
-            highest_rssi = rssi;
-            strongest_signal_channel = ch;
-        }
-    }
-
-    return strongest_signal_channel;
-}
-
-void send_noise(Nrf24* nrf) {
-    uint8_t noise_packet[32];
-    memset(noise_packet, 0xFF, sizeof(noise_packet));
-
-    uint32_t start_time = furi_get_tick();
-    while (furi_get_tick() - start_time < attack_duration) {
-        uint8_t channel = (target_channel > 0) ? target_channel : (start_channel + (rand() % (end_channel - start_channel + 1)));
-        nrf24_set_channel(nrf, channel);
-        nrf24_set_power(nrf, power_levels[current_power_index]);
-        nrf24_send_packet(nrf, noise_packet, sizeof(noise_packet));
-        furi_delay_ms(1);
+        target_channel = scan_for_active_channel(start_channel, end_channel);
     }
 }
 
 int main(void) {
     Nrf24 nrf;
-    nrf24_init(&nrf, GPIO_PIN_X, GPIO_PIN_Y);
+    if (!nrf24_init(&nrf, GPIO_PIN_X, GPIO_PIN_Y)) {
+        printf("Erro ao inicializar o NRF24\n");
+        return -1;
+    }
     nrf24_set_power(&nrf, power_levels[current_power_index]);
     nrf24_set_mode(&nrf, NRF24_MODE_TX);
 
@@ -101,8 +82,9 @@ int main(void) {
 
     while(true) {
         if(furi_thread_flags_wait(1, FuriFlagWaitAny, FuriWaitForever) == 1) {
-            send_noise(&nrf);
+            send_jamming_signal(&nrf, target_channel, start_channel, end_channel, attack_duration, power_levels[current_power_index]);
         }
+        furi_delay_ms(100);
     }
 
     return 0;
