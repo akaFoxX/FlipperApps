@@ -4,15 +4,14 @@ App(
     entry_point="main",
     fap_category="Wireless",
     fap_author="akaFoxX",
-    fap_icon="app.png",
-    stack_size=4096 * 1024,
+    fap_icon="assets/app.png",
+    stack_size=64 * 1024,  # Ajustado para um valor adequado ao Flipper Zero
     order=10,
     requires=[
         "gui",
         "furi_hal",
         "nrf24",
     ],
-    icon="app.png",
     fap_version=1,
     fap_description="NRF24 Jammer for Flipper Zero",
     fap_icon_assets="assets",

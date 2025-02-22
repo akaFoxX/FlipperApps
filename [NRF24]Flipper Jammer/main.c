@@ -18,16 +18,19 @@ void update_screen(Canvas* canvas) {
     canvas_clear(canvas);
     canvas_set_font(canvas, FontPrimary);
     canvas_draw_str(canvas, 10, 10, "Flipper Zero Jammer");
-    canvas_draw_str(canvas, 10, 30, "Start Channel:");
-    canvas_draw_number(canvas, 150, 30, start_channel);
-    canvas_draw_str(canvas, 10, 50, "End Channel:");
-    canvas_draw_number(canvas, 150, 50, end_channel);
-    canvas_draw_str(canvas, 10, 70, "Power Level:");
-    canvas_draw_number(canvas, 150, 70, current_power_index);
-    canvas_draw_str(canvas, 10, 90, "Attack Time (s):");
-    canvas_draw_number(canvas, 150, 90, attack_duration / 1000);
-    canvas_draw_str(canvas, 10, 110, "Target Channel:");
-    canvas_draw_number(canvas, 150, 110, target_channel);
+
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "Start Channel: %d", start_channel);
+    canvas_draw_str(canvas, 10, 30, buffer);
+    snprintf(buffer, sizeof(buffer), "End Channel: %d", end_channel);
+    canvas_draw_str(canvas, 10, 50, buffer);
+    snprintf(buffer, sizeof(buffer), "Power Level: %d", current_power_index);
+    canvas_draw_str(canvas, 10, 70, buffer);
+    snprintf(buffer, sizeof(buffer), "Attack Time: %ds", attack_duration / 1000);
+    canvas_draw_str(canvas, 10, 90, buffer);
+    snprintf(buffer, sizeof(buffer), "Target Channel: %d", target_channel);
+    canvas_draw_str(canvas, 10, 110, buffer);
+    
     canvas_draw_str(canvas, 10, 130, "OK to Start");
     canvas_draw_str(canvas, 10, 150, "Up/Down: Adjust Channel");
     canvas_draw_str(canvas, 10, 170, "Left/Right: Change Power");
@@ -46,22 +49,29 @@ uint8_t scan_for_active_channel(uint8_t start, uint8_t end) {
 
 void input_callback(InputEvent* event, void* context) {
     if(event->type == InputTypeShort) {
-        if(event->key == InputKeyUp && end_channel < 100) {
-            end_channel++;
-        } else if(event->key == InputKeyDown && start_channel > 1) {
-            start_channel--;
-        } else if(event->key == InputKeyLeft && current_power_index > 0) {
-            current_power_index--;
-        } else if(event->key == InputKeyRight && current_power_index < POWER_LEVELS - 1) {
-            current_power_index++;
-        } else if(event->key == InputKeyOk) {
-            furi_thread_flags_set(furi_thread_get_id(), 1);
+        switch(event->key) {
+            case InputKeyUp:
+                if(end_channel < 100) end_channel++;
+                break;
+            case InputKeyDown:
+                if(start_channel > 1) start_channel--;
+                break;
+            case InputKeyLeft:
+                if(current_power_index > 0) current_power_index--;
+                break;
+            case InputKeyRight:
+                if(current_power_index < POWER_LEVELS - 1) current_power_index++;
+                break;
+            case InputKeyOk:
+                furi_thread_flags_set(furi_thread_get_id(), 1);
+                break;
         }
-    } else if(event->type == InputTypeLong && event->key == InputKeyOk) {
-        attack_duration += 5000;
-        if(attack_duration > 60000) attack_duration = 5000;
-    } else if(event->type == InputTypeLong && event->key == InputKeyLeft) {
-        target_channel = scan_for_active_channel(start_channel, end_channel);
+    } else if(event->type == InputTypeLong) {
+        if(event->key == InputKeyOk) {
+            attack_duration = (attack_duration >= 60000) ? 5000 : attack_duration + 5000;
+        } else if(event->key == InputKeyLeft) {
+            target_channel = scan_for_active_channel(start_channel, end_channel);
+        }
     }
 }
 
@@ -82,6 +92,8 @@ int main(void) {
 
     while(true) {
         if(furi_thread_flags_wait(1, FuriFlagWaitAny, FuriWaitForever) == 1) {
+            furi_thread_flags_clear(1);
+            nrf24_set_channel(&nrf, target_channel);
             send_jamming_signal(&nrf, target_channel, start_channel, end_channel, attack_duration, power_levels[current_power_index]);
         }
         furi_delay_ms(100);
